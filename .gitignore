@@ -1,0 +1,4 @@
+# manage.py writes a timestamped backup here on every install
+backups/
+__pycache__/
+.DS_Store
