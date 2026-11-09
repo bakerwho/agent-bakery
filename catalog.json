@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {
+      "name": "lesson",
+      "category": "agent-setup",
+      "source": "agent-bakery",
+      "purpose": "Turn a user correction into a rule in the shared rulebook and fix the same mistake elsewhere in the session."
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "adapters": [
+    {
+      "name": "codex",
+      "instructions_path": "~/.codex/AGENTS.md",
+      "instructions_format": "markdown"
+    },
+    {
+      "name": "claude-code",
+      "skills_path": "~/.claude/skills",
+      "instructions_path": "~/.claude/CLAUDE.md",
+      "instructions_format": "import",
+      "agents_path": "~/.claude/agents",
+      "notes": "notes/claude-code.md"
+    }
+  ]
+}
