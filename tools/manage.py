@@ -169,8 +169,9 @@ def render_instructions(adapter: dict[str, Any]) -> str:
     renderers = {
         "markdown": lambda text: text,
         "import": lambda _text: (
-            "<!-- Written by agent-bakery tools/manage.py. Edit AGENTS.md and"
-            f" adapters.json, not this file. -->\n@{import_reference(INSTRUCTIONS_PATH)}\n"
+            "<!-- Written by agent-bakery tools/manage.py. Edit AGENTS.md (read"
+            " in place), or notes/ and adapters.json (then run install), not"
+            f" this file. -->\n@{import_reference(INSTRUCTIONS_PATH)}\n"
         ),
     }
     if format_name not in renderers:

@@ -1,8 +1,7 @@
 ## Claude Code notes
 
-These lines come from `notes/claude-code.md` and reach Claude Code only. Put
-instructions here that only make sense in one tool, or that this tool needs
-phrased differently. Keep shared rules in `AGENTS.md`.
+Instructions for Claude Code only. (Source: `notes/claude-code.md` in your
+agent-bakery copy. Keep shared rules in `AGENTS.md`.)
 
 - The secret and style hooks in `~/.agents/hooks/` run here. If one denies a
   command, use the safer form it names.

@@ -56,5 +56,10 @@ check "the failure is the unreadable file" yes "$(printf '%s' "$err" | grep -q P
 check "install fails when it cannot back up a file" nonzero "$([[ $rc -ne 0 ]] && echo nonzero || echo zero)"
 check "that file survives the failed install" precious "$(cat "$claude_md" 2>/dev/null || echo missing)"
 
+# Import paths: ~-relative under $HOME, absolute elsewhere, spaces escaped.
+ref() { python3 -c 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import manage; print(manage.import_reference(Path(sys.argv[2])))' "$root/tools" "$1"; }
+check "import path under home with a space" '~/a\ b/AGENTS.md' "$(ref "$HOME/a b/AGENTS.md")"
+check "import path outside home with a space" '/opt/a\ b/AGENTS.md' "$(ref "/opt/a b/AGENTS.md")"
+
 echo "manage.py: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]
