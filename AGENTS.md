@@ -1,9 +1,9 @@
 # Agent operating rules
 
 These instructions use the open AGENTS.md format. `tools/manage.py install`
-copies this file to every tool listed in `adapters.json` (for example
-`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` and a Cursor rule), so edit it here
-and nowhere else. Replace the examples with your own rules.
+copies this file to every tool listed in `adapters.json` (`~/.claude/CLAUDE.md`
+and `~/.codex/AGENTS.md` to start; Cursor's User Rules are pasted by hand), so
+edit it here and nowhere else. Replace the examples with your own rules.
 
 ## Place of record
 

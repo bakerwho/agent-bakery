@@ -1,4 +1,4 @@
-# Vault conventions
+# Vault folders and note conventions
 
 This folder is the place of record that every agent tool shares. Copy it out of
 the repo to a private location (the default is `~/agent-vault`) before you

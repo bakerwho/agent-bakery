@@ -3,15 +3,8 @@
   "adapters": [
     {
       "name": "codex",
-      "skills_path": "~/.codex/skills",
       "instructions_path": "~/.codex/AGENTS.md",
       "instructions_format": "markdown"
-    },
-    {
-      "name": "cursor",
-      "skills_path": "~/.cursor/skills",
-      "instructions_path": "~/.cursor/rules/shared-agentic-setup.mdc",
-      "instructions_format": "mdc"
     },
     {
       "name": "claude-code",
