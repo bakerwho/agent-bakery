@@ -11,7 +11,7 @@ import os
 import re
 import sys
 
-EM_DASH = "—"
+EM_DASH = "\u2014"
 PROSE_EXT = (".md", ".mdx", ".txt", ".html", ".rst")
 # Files that quote the banned phrases as data.
 EXEMPT = ("/.agents/hooks/", "/AGENTS.md", "/CLAUDE.md", "agent-rules", "writing-style", "de-ai-writing")

@@ -189,28 +189,28 @@ def install() -> int:
     try:
         for adapter in adapters():
             adapter_name = adapter["name"]
-            skill_root = adapter_path(adapter, "skills_path")
-            instruction_target = adapter_path(adapter, "instructions_path")
-            skill_root.mkdir(parents=True, exist_ok=True)
-            adapter_state: dict[str, Any] = {
-                "skills_path": str(skill_root),
-                "instructions_path": str(instruction_target),
-                "skills": {},
-            }
+            adapter_state: dict[str, Any] = {}
             state["adapters"][adapter_name] = adapter_state
 
-            for name in selected_names():
-                source = SKILLS_ROOT / name
-                destination = skill_root / name
-                existed = backup_item(
-                    destination, backup_dir, adapter_name, "skills", name
-                )
-                adapter_state["skills"][name] = {"existed": existed}
-                staged = skill_root / f".{name}.agent-stage-{os.getpid()}"
-                remove_path(staged)
-                copy_path(source, staged)
-                remove_path(destination)
-                staged.rename(destination)
+            # skills_path is optional: a tool that already reads this repo's
+            # skills/ folder (for example from ~/.agents/skills) needs no copy.
+            if "skills_path" in adapter:
+                skill_root = adapter_path(adapter, "skills_path")
+                skill_root.mkdir(parents=True, exist_ok=True)
+                adapter_state["skills_path"] = str(skill_root)
+                adapter_state["skills"] = {}
+                for name in selected_names():
+                    source = SKILLS_ROOT / name
+                    destination = skill_root / name
+                    existed = backup_item(
+                        destination, backup_dir, adapter_name, "skills", name
+                    )
+                    adapter_state["skills"][name] = {"existed": existed}
+                    staged = skill_root / f".{name}.agent-stage-{os.getpid()}"
+                    remove_path(staged)
+                    copy_path(source, staged)
+                    remove_path(destination)
+                    staged.rename(destination)
 
             if "agents_path" in adapter:
                 agent_root = adapter_path(adapter, "agents_path")
@@ -229,24 +229,28 @@ def install() -> int:
                     remove_path(destination)
                     staged.rename(destination)
 
-            instruction_existed = backup_item(
-                instruction_target,
-                backup_dir,
-                adapter_name,
-                "instructions",
-                instruction_target.name,
-            )
-            adapter_state["instructions_existed"] = instruction_existed
-            instruction_target.parent.mkdir(parents=True, exist_ok=True)
-            staged_instruction = instruction_target.parent / (
-                f".{instruction_target.name}.agent-stage-{os.getpid()}"
-            )
-            remove_path(staged_instruction)
-            staged_instruction.write_text(
-                render_instructions(adapter["instructions_format"]), encoding="utf-8"
-            )
-            remove_path(instruction_target)
-            staged_instruction.rename(instruction_target)
+            if "instructions_path" in adapter:
+                instruction_target = adapter_path(adapter, "instructions_path")
+                adapter_state["instructions_path"] = str(instruction_target)
+                instruction_existed = backup_item(
+                    instruction_target,
+                    backup_dir,
+                    adapter_name,
+                    "instructions",
+                    instruction_target.name,
+                )
+                adapter_state["instructions_existed"] = instruction_existed
+                instruction_target.parent.mkdir(parents=True, exist_ok=True)
+                staged_instruction = instruction_target.parent / (
+                    f".{instruction_target.name}.agent-stage-{os.getpid()}"
+                )
+                remove_path(staged_instruction)
+                staged_instruction.write_text(
+                    render_instructions(adapter["instructions_format"]),
+                    encoding="utf-8",
+                )
+                remove_path(instruction_target)
+                staged_instruction.rename(instruction_target)
     except Exception:
         restore_state(state, backup_dir)
         raise
@@ -274,8 +278,10 @@ def verify(quiet: bool = False) -> dict[str, Any]:
 
     for adapter in adapters():
         adapter_name = adapter["name"]
-        skill_root = adapter_path(adapter, "skills_path")
-        for name in selected_names():
+        skill_root = (
+            adapter_path(adapter, "skills_path") if "skills_path" in adapter else None
+        )
+        for name in selected_names() if skill_root else []:
             source = SKILLS_ROOT / name
             destination = skill_root / name
             canonical_hash = tree_hash(source) if source.is_dir() else None
@@ -315,6 +321,8 @@ def verify(quiet: bool = False) -> dict[str, Any]:
                     }
                 )
 
+        if "instructions_path" not in adapter:
+            continue
         instruction_target = adapter_path(adapter, "instructions_path")
         expected = render_instructions(adapter["instructions_format"])
         actual = (
@@ -357,9 +365,8 @@ def verify(quiet: bool = False) -> dict[str, Any]:
 
 def restore_state(state: dict[str, Any], backup_dir: Path) -> None:
     for adapter_name, adapter_state in reversed(list(state.get("adapters", {}).items())):
-        skill_root = Path(adapter_state["skills_path"])
-        for name, skill_state in reversed(list(adapter_state["skills"].items())):
-            destination = skill_root / name
+        for name, skill_state in reversed(list(adapter_state.get("skills", {}).items())):
+            destination = Path(adapter_state["skills_path"]) / name
             remove_path(destination)
             if skill_state["existed"]:
                 copy_path(
@@ -372,6 +379,8 @@ def restore_state(state: dict[str, Any], backup_dir: Path) -> None:
             if agent_state["existed"]:
                 copy_path(backup_dir / adapter_name / "agents" / name, destination)
 
+        if "instructions_path" not in adapter_state:
+            continue
         instruction_target = Path(adapter_state["instructions_path"])
         remove_path(instruction_target)
         if adapter_state.get("instructions_existed", False):

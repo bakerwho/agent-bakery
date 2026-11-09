@@ -8,16 +8,29 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            python: "3.9"
+          - os: ubuntu-latest
+            python: ""
+          - os: macos-latest
+            python: ""
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} python ${{ matrix.python || 'default' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Use Python ${{ matrix.python }}
+        if: matrix.python != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
       - name: Install jq (macOS runners may lack it)
         if: runner.os == 'macOS'
         run: command -v jq || brew install jq
       - name: Validate skills and test install, verify, rollback
-        run: bash tools/test-manage.sh
+        run: python3 --version && bash tools/test-manage.sh
       - name: Test secret and style hooks
         run: bash hooks/test-hooks.sh
       - name: Test hooks with macOS system bash 3.2

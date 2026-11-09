@@ -27,15 +27,16 @@ backup_id=$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sy
 
 manage verify > /dev/null && rc=0 || rc=$?
 check "verify passes after install" 0 "$rc"
+check "Codex gets instructions but no skill copy" "yes no" "$([[ -f "$AGENT_SETUP_ADAPTER_PREFIX$HOME/.codex/AGENTS.md" ]] && echo yes || echo no) $([[ -e "$AGENT_SETUP_ADAPTER_PREFIX$HOME/.codex/skills" ]] && echo yes || echo no)"
 check "CLAUDE.md now matches AGENTS.md" same "$(cmp -s "$root/AGENTS.md" "$claude_md" && echo same || echo different)"
 
-echo "drift" >> "$AGENT_SETUP_ADAPTER_PREFIX$HOME/.codex/skills/lesson/SKILL.md"
+echo "drift" >> "$AGENT_SETUP_ADAPTER_PREFIX$HOME/.claude/skills/lesson/SKILL.md"
 manage verify > /dev/null && rc=0 || rc=$?
 check "verify fails after an installed copy drifts" 1 "$rc"
 
 manage rollback "$backup_id" > /dev/null
 check "rollback restores the old CLAUDE.md" "my old instructions" "$(cat "$claude_md")"
-check "rollback removes skills that did not exist before" absent "$([[ -e "$AGENT_SETUP_ADAPTER_PREFIX$HOME/.codex/skills/lesson" ]] && echo present || echo absent)"
+check "rollback removes skills that did not exist before" absent "$([[ -e "$AGENT_SETUP_ADAPTER_PREFIX$HOME/.claude/skills/lesson" ]] && echo present || echo absent)"
 
 echo "manage.py: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]
