@@ -1,0 +1,25 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq (macOS runners may lack it)
+        if: runner.os == 'macOS'
+        run: command -v jq || brew install jq
+      - name: Validate skills and test install, verify, rollback
+        run: bash tools/test-manage.sh
+      - name: Test secret and style hooks
+        run: bash hooks/test-hooks.sh
+      - name: Test hooks with macOS system bash 3.2
+        if: runner.os == 'macOS'
+        run: /bin/bash hooks/test-hooks.sh
