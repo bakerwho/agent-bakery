@@ -10,8 +10,9 @@
       "name": "claude-code",
       "skills_path": "~/.claude/skills",
       "instructions_path": "~/.claude/CLAUDE.md",
-      "instructions_format": "markdown",
-      "agents_path": "~/.claude/agents"
+      "instructions_format": "import",
+      "agents_path": "~/.claude/agents",
+      "notes": "notes/claude-code.md"
     }
   ]
 }

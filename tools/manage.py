@@ -147,18 +147,39 @@ def validate_all() -> dict[str, list[str]]:
     return results
 
 
-def render_instructions(format_name: str) -> str:
+def import_reference(path: Path) -> str:
+    """Path for a CLAUDE.md-style @import: ~-relative when under $HOME, spaces escaped."""
+    home = Path.home()
+    try:
+        text = "~/" + path.relative_to(home).as_posix()
+    except ValueError:
+        text = path.as_posix()
+    return text.replace(" ", "\\ ")
+
+
+def render_instructions(adapter: dict[str, Any]) -> str:
+    """Render AGENTS.md for one adapter, plus that adapter's optional notes file.
+
+    "import" writes a thin file that loads AGENTS.md in place through an @path
+    import (Claude Code supports these in ~/.claude/CLAUDE.md), so edits to
+    AGENTS.md apply without a reinstall. "markdown" writes a full copy.
+    """
+    format_name = adapter["instructions_format"]
     body = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
     renderers = {
         "markdown": lambda text: text,
-        "mdc": lambda text: (
-            "---\ndescription: Shared open-format operating rules\n"
-            "alwaysApply: true\n---\n\n" + text
+        "import": lambda _text: (
+            "<!-- Written by agent-bakery tools/manage.py. Edit AGENTS.md and"
+            f" adapters.json, not this file. -->\n@{import_reference(INSTRUCTIONS_PATH)}\n"
         ),
     }
     if format_name not in renderers:
         raise ValueError(f"unsupported instructions format: {format_name}")
-    return renderers[format_name](body)
+    rendered = renderers[format_name](body)
+    if "notes" in adapter:
+        notes = (ROOT / adapter["notes"]).read_text(encoding="utf-8")
+        rendered = rendered.rstrip("\n") + "\n\n" + notes
+    return rendered
 
 
 def backup_item(
@@ -176,9 +197,14 @@ def install() -> int:
         print(json.dumps({"status": "validation_failed", "errors": validation}, indent=2))
         return 2
 
-    backup_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    BACKUPS_ROOT.mkdir(parents=True, exist_ok=True)
+    backup_id, suffix = stamp, 1
+    while (BACKUPS_ROOT / backup_id).exists():  # two installs in one second
+        suffix += 1
+        backup_id = f"{stamp}-{suffix}"
     backup_dir = BACKUPS_ROOT / backup_id
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_dir.mkdir(exist_ok=False)
     state: dict[str, Any] = {
         "backup_id": backup_id,
         "skills": selected_names(),
@@ -231,7 +257,6 @@ def install() -> int:
 
             if "instructions_path" in adapter:
                 instruction_target = adapter_path(adapter, "instructions_path")
-                adapter_state["instructions_path"] = str(instruction_target)
                 instruction_existed = backup_item(
                     instruction_target,
                     backup_dir,
@@ -239,6 +264,10 @@ def install() -> int:
                     "instructions",
                     instruction_target.name,
                 )
+                # Record the target only after its backup exists: restore_state
+                # deletes every recorded target, and a target whose backup
+                # failed must be left alone.
+                adapter_state["instructions_path"] = str(instruction_target)
                 adapter_state["instructions_existed"] = instruction_existed
                 instruction_target.parent.mkdir(parents=True, exist_ok=True)
                 staged_instruction = instruction_target.parent / (
@@ -246,7 +275,7 @@ def install() -> int:
                 )
                 remove_path(staged_instruction)
                 staged_instruction.write_text(
-                    render_instructions(adapter["instructions_format"]),
+                    render_instructions(adapter),
                     encoding="utf-8",
                 )
                 remove_path(instruction_target)
@@ -324,7 +353,7 @@ def verify(quiet: bool = False) -> dict[str, Any]:
         if "instructions_path" not in adapter:
             continue
         instruction_target = adapter_path(adapter, "instructions_path")
-        expected = render_instructions(adapter["instructions_format"])
+        expected = render_instructions(adapter)
         actual = (
             instruction_target.read_text(encoding="utf-8")
             if instruction_target.is_file()
@@ -361,6 +390,29 @@ def verify(quiet: bool = False) -> dict[str, Any]:
     if not quiet:
         print(json.dumps(result, indent=2, sort_keys=True))
     return result
+
+
+def plan() -> int:
+    """Show what install would write, without writing anything."""
+    result = verify(quiet=True)
+    if result["validation_errors"]:
+        print(json.dumps({"status": "validation_failed", "errors": result["validation_errors"]}, indent=2))
+        return 2
+    rows = []
+    for check in result["skill_checks"]:
+        target = Path(adapter_path(next(a for a in adapters() if a["name"] == check["adapter"]), "skills_path")) / check["skill"]
+        rows.append((check, str(target)))
+    for check in result["agent_checks"]:
+        target = Path(adapter_path(next(a for a in adapters() if a["name"] == check["adapter"]), "agents_path")) / check["agent"]
+        rows.append((check, str(target)))
+    for check in result["instruction_checks"]:
+        rows.append((check, check["path"]))
+    for check, target in rows:
+        status = "unchanged" if check["hash_match"] else "replace" if check["exists"] else "new"
+        print(f"{status:9}  {check['adapter']:12}  {target}")
+    changes = sum(1 for check, _ in rows if not check["hash_match"])
+    print(f"{changes} of {len(rows)} targets would change. Replaced files are backed up first.")
+    return 0
 
 
 def restore_state(state: dict[str, Any], backup_dir: Path) -> None:
@@ -410,6 +462,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("install", help="Back up and install all declared adapters.")
     subparsers.add_parser("verify", help="Validate and compare canonical hashes.")
+    subparsers.add_parser("plan", help="Show what install would write, without writing.")
     rollback_parser = subparsers.add_parser("rollback", help="Restore one backup.")
     rollback_parser.add_argument("backup_id")
     args = parser.parse_args()
@@ -418,6 +471,8 @@ def main() -> int:
         return install()
     if args.command == "verify":
         return 0 if verify()["ok"] else 1
+    if args.command == "plan":
+        return plan()
     if args.command == "rollback":
         return rollback(args.backup_id)
     return 2

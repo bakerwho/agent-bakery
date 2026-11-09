@@ -7,9 +7,9 @@ that every correction you make is written into, a review agent that checks
 work against that rulebook, and hooks that stop secrets from leaking into the
 transcript.
 
-You edit `AGENTS.md` and `skills/` here. `tools/manage.py install` backs up
-each tool's current files, copies yours in where a tool needs a copy, and
-checks every copy by hash.
+You edit `AGENTS.md` and `skills/` here. `tools/manage.py plan` shows what
+would change; `install` backs up each tool's current files, writes yours in
+where a tool needs them, and checks every written file by hash.
 
 ## Where each file lands
 
@@ -23,7 +23,9 @@ they need no copy. Claude Code does not, so it gets one.
  skills/*/  (= ~/.agents/skills) ─────────► Codex, Cursor (read it in place)
      │
      ├─ tools/manage.py install ───────────► ~/.claude/skills      (copy)
- AGENTS.md ─┤  (targets in adapters.json) ─► ~/.claude/CLAUDE.md   (copy)
+ AGENTS.md ─┤  (targets in adapters.json) ─► ~/.claude/CLAUDE.md   (2-line file that
+     │      │                           │                          imports AGENTS.md,
+     │      │                           │                          plus notes/claude-code.md)
      │      │                           └──► ~/.codex/AGENTS.md    (copy)
  agents/*.md ─────────────────────────────► ~/.claude/agents      (copy)
 
@@ -43,13 +45,16 @@ they need no copy. Claude Code does not, so it gets one.
 | `AGENTS.md` | Your always-loaded operating rules, in the open [AGENTS.md](https://agents.md) format. Starter content; rewrite it. |
 | `skills/<name>/SKILL.md` | Skills in the open [Agent Skills](https://agentskills.io) format: a folder with a `SKILL.md` (YAML `name` and `description`, then instructions) and any scripts or references it needs. |
 | `catalog.json` | The skills that get copied and verified. A skill folder not listed here is not copied, but Codex and Cursor still see it because they read `skills/` directly. |
-| `adapters.json` | One entry per tool that needs a copy: its skills folder (`skills_path`), its instructions file (`instructions_path`) and that file's format (`markdown`, or `mdc` for a Cursor project rule). Both paths are optional. |
+| `adapters.json` | One entry per tool that needs files written: its skills folder (`skills_path`), its instructions file (`instructions_path`), that file's format, and an optional `notes` file. Formats: `markdown` (full copy) or `import` (a short file with an `@` import of `AGENTS.md`, for tools that support imports). Every key but `name` is optional. |
+| `notes/<tool>.md` | Instructions for one tool only, appended after `AGENTS.md` for the adapter that names it. Use it when a tool needs a rule phrased differently or a rule only makes sense there. |
 | `agents/` | Subagent definitions. Copied only for adapters with an `agents_path` (Claude Code). |
 | `tools/manage.py` | The installer. Python 3.9+, standard library only. |
 | `hooks/` | Claude Code hooks: `secret-guard.sh` denies commands that would print a secret, `secret-scan.sh` flags secrets that reached tool output, `redact-secrets.sh` filters them, `style-gate.sh` flags banned phrases and em dashes. |
 | `vault/` | Starter place of record: rulebook, roadmap/system/repo templates, folder layout. |
 
-Sources for the tool paths, checked 2026-11-09: Codex loads user skills from
+Sources for the tool paths, checked 2026-11-09: Claude Code loads `@path`
+imports inside `~/.claude/CLAUDE.md` without an approval prompt
+([memory](https://code.claude.com/docs/en/memory)). Codex loads user skills from
 `$HOME/.agents/skills` and global instructions from `~/.codex/AGENTS.md`
 ([skills](https://developers.openai.com/codex/skills),
 [AGENTS.md](https://developers.openai.com/codex/guides/agents-md)). Cursor
@@ -95,7 +100,18 @@ bash hooks/test-hooks.sh
 `test-manage.sh` installs into a throwaway directory, checks `verify`, makes a
 copy drift, and rolls back. It never touches your real tool folders.
 
-### 3. Dry run into a temporary folder
+### 3. See what install would change
+
+```bash
+python3 tools/manage.py plan
+```
+
+`plan` writes nothing. It lists every target as `new`, `replace` or
+`unchanged`. Each `replace` line is a file of yours that install would back up
+and overwrite, so read those before you go on.
+
+To see the actual files without touching your tools, install into a
+temporary folder. The prefix is put in front of every target path:
 
 ```bash
 export AGENT_SETUP_ADAPTER_PREFIX=$(mktemp -d)
@@ -104,9 +120,6 @@ python3 tools/manage.py install
 find "$AGENT_SETUP_ADAPTER_PREFIX" -type f
 unset AGENT_SETUP_ADAPTER_PREFIX AGENT_SETUP_BACKUPS_ROOT
 ```
-
-The prefix is put in front of every target path, so you can see exactly what a
-real install would write.
 
 ### 4. Make it yours, then install for real
 
@@ -119,7 +132,7 @@ python3 tools/manage.py verify
 ```
 
 `install` **replaces** each tool's instructions file (for example your existing
-`~/.claude/CLAUDE.md`) with a copy of `AGENTS.md`, and replaces any skill folder
+`~/.claude/CLAUDE.md`) with the rendered `AGENTS.md`, and replaces any skill folder
 with the same name. The old files go to `backups/<timestamp>/` first. Move
 anything from your old instructions that you want to keep into `AGENTS.md`
 before you install, or copy it back out of the backup afterwards.
@@ -173,12 +186,17 @@ Steps the agent follows.
 Add an entry to `catalog.json`, then run `install`. `install` refuses to run if
 any listed skill fails validation, and says which.
 
-**Change your rules.** Edit `AGENTS.md`, run `install`, and update Cursor's
-User Rules. Never edit the copies in `~/.claude` or `~/.codex`: the next
-install overwrites them, and `verify` reports them as drifted.
+**Change your rules.** Edit `AGENTS.md`. Claude Code picks the change up in
+its next session, since `~/.claude/CLAUDE.md` imports the file. Run `install`
+to refresh the Codex copy, and update Cursor's User Rules. Never edit the files
+in `~/.claude` or `~/.codex` directly: the next install overwrites them, and
+`verify` reports them as drifted. Rules for one tool only go in
+`notes/<tool>.md`.
 
 **Add a tool.** If the tool reads `~/.agents/skills`, it needs only an
-instructions entry. Otherwise give it a `skills_path` too. For example, for
+instructions entry. Otherwise give it a `skills_path` too. Use the `import`
+format only if the tool's docs say its instructions file supports `@path`
+imports; otherwise use `markdown`. For example, for
 Gemini CLI (check the paths against your tool's current docs):
 
 ```json
@@ -212,8 +230,14 @@ PR or draft. It reads the rulebook and returns `READY`, `FIX_FIRST` or
   do not say how it handles two skills with the same name. Not tested here.
 - Removing a skill from `catalog.json` does not delete copies already
   installed. Delete them by hand from `~/.claude/skills`.
-- Copies take effect only after `install`. The upside: `verify` can prove
-  every copy matches the source.
+- Copies (skills, subagents, the Codex instructions) take effect only after
+  `install`. The upside: `verify` can prove every copy matches the source.
+- The Claude Code import was checked against the Claude Code docs and by
+  `tools/test-manage.sh` (the import line points at this repo's `AGENTS.md`,
+  spaces escaped), not by starting Claude Code in CI.
+- Codex reads `~/.codex/AGENTS.override.md` instead of `AGENTS.md` when the
+  override exists, so `verify` can pass while Codex ignores the copy. Delete
+  or empty the override file if you have one.
 - Hooks and subagents are Claude Code only. Other tools get the instructions
   and skills.
 
@@ -230,6 +254,19 @@ instructions as well as skills, backups and rollback on every install, hash
 checks for drift, and the vault and rulebook so corrections carry across tools.
 It has no GUI and no skill browser. The two can coexist, as long as only one of
 them writes to a given skills folder.
+
+Two questions from the [Hacker News thread on Skills Manager](https://news.ycombinator.com/item?id=47423910)
+went unanswered there, and shaped this repo. If you edit a skill from two
+tools, which edit wins? Here, nothing edits the tool folders but `install`,
+and `verify` reports any copy that changed behind its back. And if one agent
+follows a multi-step rule while another ignores everything past the first
+line? Put that tool's version in `notes/<tool>.md`.
+
+Workflow runners such as [Crewplane](https://github.com/crewplaneai/crewplane)
+work at a different layer: they run coding-agent CLIs through reviewed stages,
+and each CLI still reads its own instructions and skills, which is what this
+repo sets up. Crewplane's own repo uses the same thin-file pattern this repo
+uses for Claude Code: its `CLAUDE.md` and `GEMINI.md` import `AGENTS.md`.
 
 One collision to know about: Skills Manager's source (`apps/desktop/electron/main.ts`)
 treats `~/.agents/skills` as Codex's skills folder. With this repo cloned to
